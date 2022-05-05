@@ -11,8 +11,7 @@ Due to self-imposed and QB64-related limitations, this app uses a 3D engine that
 ---
 ## **Installation**
  
-HOW TO INSTALL:
-** Currently, only Windows 7-10 is supported**
+HOW TO INSTALL: **Currently, only Windows 7-10 is supported**
 1. Download the application as a zipped folder from GitHub.
 2. Navigate to your downloads, right click on the zipped folder, and "Extract All..." to some destination.
 3. Run "QB3D.exe."

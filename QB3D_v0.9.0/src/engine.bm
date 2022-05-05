@@ -1,0 +1,466 @@
+$If MATHBI = UNDEFINED Then
+    '$INCLUDE:'math.bi'
+$End If
+
+$If OBJECTBI = UNDEFINED Then
+    '$INCLUDE:'object.bi'
+$End If
+
+$If INTERFACEBI = UNDEFINED Then
+    '$INCLUDE:'interface.bi'
+$End If
+
+$If ENGINEBM = UNDEFINED Then
+    Sub initialize
+        ' initialize console
+        _Console Off
+
+        ' initialize graphics window
+        Screen _NewImage(DWIDTH, DHEIGHT, 32)
+        _Title "QB3D Modeler - Version 0.9.0"
+        _ScreenMove _Middle
+        _DisplayOrder _Hardware , _Software , _Hardware1
+        _MouseHide
+
+        Randomize Timer
+        Call io_setup
+    End Sub
+
+    Sub update_physics
+        Static speed
+        speed = 5.0
+        If get_key_down("lctrl") Then speed = 25.0
+
+        df = 0
+        If get_key_down("w") Then df = 1
+        If get_key_down("s") Then df = df - 1
+        dr = 0
+        If get_key_down("a") Then dr = 1
+        If get_key_down("d") Then dr = dr - 1
+        du = 0
+        If get_key_down("space") Then du = 1
+        If get_key_down("lshift") Then du = du - 1
+
+        Dim pNewRight As vec3
+        Call vec3_cross(player.lookUp, player.look, pNewRight)
+        Dim dfVector As vec3
+        Dim drVector As vec3
+        Dim duVector As vec3
+
+        ' calculate vector of input
+        Call vec3_multiply(player.look, df, dfVector)
+        Call vec3_multiply(pNewRight, dr, drVector)
+        Call vec3_multiply(VEC3_UP, du, duVector)
+        Dim moveVector As vec3
+        Call vec3_add_3(dfVector, drVector, duVector, moveVector)
+        Call vec3_normalize(moveVector) ' normalize before time scaling
+        Call vec3_multiply(moveVector, speed * deltaTime, moveVector)
+        player.velocity = moveVector
+        Call vec3_add(player.position, player.velocity, player.position)
+
+        ' update up & look
+        Static look_dx As Single
+        Static look_dy As Single
+        Static mouseVec As vec2
+        mouseInp = get_mouse_input(mouseVec)
+        look_dx = look_dx + mouseVec.v * deltaTime / 5
+        look_dy = look_dy + mouseVec.u * deltaTime / 5
+        If look_dx > PI / 2 Then look_dx = PI / 2
+        If look_dx < -PI / 2 Then look_dx = -PI / 2
+        If look_dy > PI * 2 Then look_dy = 0
+        If look_dy < 0 Then look_dy = PI * 2
+
+        ' matrices for rotation & temp vectors
+        Dim matRotateY As mat4
+        Dim matRotateX As mat4
+        Dim newLook As vec3
+        Dim newUp As vec3
+
+        ' rotate up & look
+        Call mat4_make_rotation(matRotateY, look_dy, "y")
+        Call mat4_make_rotation(matRotateX, look_dx, "x")
+        Call vec3_mat4_multiply(VEC3_FORWARD, matRotateX, newLook) ' forward * dx
+        Call vec3_mat4_multiply(newLook, matRotateY, player.look) ' forward * dy
+        Call vec3_mat4_multiply(VEC3_UP, matRotateX, newUp) ' up * dx
+        Call vec3_mat4_multiply(newUp, matRotateY, player.lookUp) ' up * dy
+        Call vec3_normalize(player.look)
+        Call vec3_normalize(player.lookUp)
+
+        ' make view mat
+        Dim pointMat As mat4
+        Call mat4_make_point_at(player.position, player.look, player.lookUp, pointMat)
+        Call mat4_make_inverse(pointMat, player.viewMat)
+    End Sub
+
+    Sub setup_scripts
+        For i = 1 To OBJ_MAX_COUNT - 1
+            Static curObj As game_object
+            curObj = gameObjectHandler(i)
+            ' check for valid object
+            If Not curObj.exists Then _Continue
+
+            Select Case curObj.scriptID
+                Case 253 ' minecraft demo (seedmaker)
+
+                    id = load_texture("stone")
+
+                    Dim newPos As vec3
+                    For x = -32 To 32
+                        For z = -32 To 32
+                            If Sqr(x * x + z * z) <= 32 Then
+                                newPos.x = x * 2
+                                newPos.z = z * 2
+                                newPos.y = -5
+                                newID = duplicate_game_object(newPos, i)
+                                gameObjectHandler(newID).velocity = newPos
+                                gameObjectHandler(newID).scriptID = 254
+                            End If
+                    Next z, x
+
+                    gameObjectHandler(i).exists = FALSE
+
+                Case 3 ' planet demo
+                    Static init
+
+                    If Not init Then
+                        Dim faraway As vec3
+                        faraway.x = 100000
+                        meshPosition = load_game_object(faraway, VEC3_DEFAULT, VEC3_ONE, VEC3_DEFAULT, "explosion", 0)
+                        init = TRUE
+                    End If
+            End Select
+        Next
+    End Sub
+
+    Sub update_scripts
+        For i = 1 To OBJ_MAX_COUNT - 1
+            Static curObj As game_object
+            curObj = gameObjectHandler(i)
+            ' check for valid object
+            If Not curObj.exists Then _Continue
+
+            Select Case curObj.scriptID
+                Case 254 ' minecraft demo (block)
+                    Dim newPos As vec3
+                    newPos.x = gameObjectHandler(i).velocity.x + Int(player.position.x / 2) * 2
+                    newPos.z = gameObjectHandler(i).velocity.z + Int(player.position.z / 2) * 2
+                    newPos.y = _Round(Sin(newPos.x / 10) * 2 + Cos(newPos.z / 100) * 3) * 2 - 20
+
+                    gameObjectHandler(i).position = newPos
+
+                    If newPos.y > -18 Then
+                        For j = gameObjectHandler(i).meshPointer.u To gameObjectHandler(i).meshPointer.v
+                            meshHandler(j).texPointer = 1
+                        Next
+                    Else
+                        For j = gameObjectHandler(i).meshPointer.u To gameObjectHandler(i).meshPointer.v
+                            meshHandler(j).texPointer = 2
+                        Next
+                    End If
+
+                Case 3 ' planets demo
+                    Static simSpeed
+                    simSpeed = 1.0
+
+                    If Not get_key_down("t") Then
+                        Static F As vec3
+                        Static acceleration As vec3
+                        F = VEC3_DEFAULT
+                        acceleration = VEC3_DEFAULT
+
+                        rA = curObj.scale.x
+                        massA = rA * rA * rA * (3 / 4) * PI
+                        For j = 1 To OBJ_MAX_COUNT - 1
+                            If j <> i Then
+                                If Not gameObjectHandler(j).exists Then _Continue
+
+                                ' if from same script
+                                If gameObjectHandler(j).scriptID = 3 Then
+                                    d = vec3_get_distance(curObj.position, gameObjectHandler(j).position)
+
+                                    rB = gameObjectHandler(j).scale.x
+                                    massB = rB * rB * rB * (3 / 4) * PI
+
+                                    Static trajectory As vec3
+                                    Static Fg As vec3
+                                    Fg = VEC3_DEFAULT
+
+                                    Call vec3_subtract(gameObjectHandler(j).position, curObj.position, trajectory)
+                                    Call vec3_normalize(trajectory)
+
+                                    FgMag = (massA * massB) / (d * d)
+                                    Call vec3_multiply(trajectory, FgMag, Fg)
+                                    Call vec3_add(F, Fg, F)
+
+                                    If d < rA + rB Then
+                                        If rA >= rB Then
+                                            ' create explosion
+                                            Dim expSize As vec3
+                                            Call vec3_divide(gameObjectHandler(i).scale, 20, expSize)
+                                            expID = clone_game_object(gameObjectHandler(j).position, 4)
+                                            gameObjectHandler(expID).scale = expSize
+                                            gameObjectHandler(expID).scriptID = 4
+                                            Call unload_game_object(j)
+                                        End If
+                                    End If
+                                End If
+                            End If
+                        Next
+
+                        Call vec3_divide(F, massA, acceleration)
+                        Call vec3_multiply(acceleration, deltaTime * simSpeed, acceleration)
+                        Call vec3_add(gameObjectHandler(i).velocity, acceleration, gameObjectHandler(i).velocity)
+                        Static velocityDelta As vec3
+                        Call vec3_multiply(gameObjectHandler(i).velocity, deltaTime * simSpeed, velocityDelta)
+                        Call vec3_add(gameObjectHandler(i).position, velocityDelta, gameObjectHandler(i).position)
+
+                        ' camera at earth
+                        Static viewIndex
+                        If viewIndex = 0 Then viewIndex = 3
+                        If get_key_press("r") Then
+                            viewIndex = viewIndex + 1
+                            If viewIndex = 5 Then viewIndex = 1
+                        End If
+
+                        If i = viewIndex Then
+                            'player.position = curObj.position
+                            player.velocity = VEC3_DEFAULT
+
+                            trajectory = curObj.position
+                            Call vec3_normalize(trajectory)
+                            Call vec3_multiply(trajectory, curObj.scale.x * 8, trajectory)
+                            player.cameraOffset = trajectory
+                            player.cameraOffset.y = curObj.scale.x * 6
+                            Call vec3_add(curObj.position, player.cameraOffset, player.position)
+                        End If
+                    End If
+
+                Case 4 ' planet demo (explosion fx)
+                    Static fxTime
+                    Static size
+
+                    If size = 0 Then
+                        size = gameObjectHandler(i).scale.x
+                    End If
+                    gameObjectHandler(i).scale.x = (Rnd + 1) * (size / (fxTime + 0.5))
+                    gameObjectHandler(i).scale.y = (Rnd + 1) * (size / (fxTime + 0.5))
+                    gameObjectHandler(i).scale.z = (Rnd + 1) * (size / (fxTime + 0.5))
+                    fxTime = fxTime + deltaTime
+                    If fxTime > 1 Then
+                        Call unload_game_object(i)
+                        fxTime = 0.0
+                        size = 0
+                    End If
+            End Select
+        Next
+    End Sub
+
+    Sub update_render
+        For i = 1 To OBJ_MAX_COUNT - 1
+            Static curObj As game_object
+            curObj = gameObjectHandler(i)
+
+            ' check for valid object & mesh
+            If Not curObj.exists Then _Continue
+            If Not curObj.visible Then _Continue
+            If curObj.meshPointer.u = 0 Or curObj.meshPointer.v = 0 Or curObj.meshPointer.v <= curObj.meshPointer.u Then _Continue
+
+            ' draw object's specific mesh in mesh handler
+            For j = curObj.meshPointer.u To curObj.meshPointer.v
+                Static curTri As tri
+                'Static sTri As tri
+                'Static rTri As tri
+                Static tTri As tri
+                Static viewTri As tri
+                Static normal As vec3
+                curTri = meshHandler(j)
+                ' preserve UVs
+                viewTri = curTri
+
+                ' transform matrices
+                Static S As mat4
+                Static R As mat4
+                Static Ri As mat4
+                Static Rx As mat4
+                Static Ry As mat4
+                Static Rz As mat4
+                'Static T As mat4
+
+                Static SR As mat4
+                'Static SRT As mat4
+
+                If FALSE Then 'is_object_local(curObj) Then
+                    tTri = curTri
+                    normal = curTri.vn
+                Else
+                    hasS = FALSE
+                    If Not vec3_equals(curObj.scale, VEC3_DEFAULT) Then
+                        hasS = TRUE
+                        Call mat4_make_scale(S, curObj.scale.x, curObj.scale.y, curObj.scale.z)
+                    End If
+
+                    hasR = FALSE
+                    If Not curObj.rotation.x = 0 Then
+                        hasR = TRUE
+                        Call mat4_make_rotation(Rx, curObj.rotation.x, "x")
+                        Call mat4_make_rotation(Ry, curObj.rotation.y, "y")
+                        Call mat4_make_rotation(Rz, curObj.rotation.z, "z")
+                        Call mat4_multiply(Rx, Ry, Ri)
+                        Call mat4_multiply(Ri, Rz, R)
+                    End If
+
+                    If hasR Or hasS Then
+                        If hasR And hasS Then
+                            Call mat4_multiply(S, R, SR)
+                        ElseIf hasR And Not hasS Then
+                            SR = R
+                        ElseIf Not hasR And hasS Then
+                            SR = S
+                        End If
+
+                        normal = curTri.vn
+                        Call vec3_mat4_multiply(curTri.v0, SR, tTri.v0)
+                        Call vec3_mat4_multiply(curTri.v1, SR, tTri.v1)
+                        Call vec3_mat4_multiply(curTri.v2, SR, tTri.v2)
+                        If hasR Then Call vec3_mat4_multiply(curTri.vn, R, normal) ' rotate normal
+                    End If
+
+                    If Not vec3_equals(curObj.position, VEC3_DEFAULT) Then
+                        Call vec3_add(tTri.v0, curObj.position, tTri.v0)
+                        Call vec3_add(tTri.v1, curObj.position, tTri.v1)
+                        Call vec3_add(tTri.v2, curObj.position, tTri.v2)
+                    End If
+
+                    '' do scaling
+                    'Call vec3_mat4_multiply(curTri.v0, S, sTri.v0)
+                    'Call vec3_mat4_multiply(curTri.v1, S, sTri.v1)
+                    'Call vec3_mat4_multiply(curTri.v2, S, sTri.v2)
+
+                    '' do rotation
+                    'Call vec3_mat4_multiply(sTri.v0, R, rTri.v0)
+                    'Call vec3_mat4_multiply(sTri.v1, R, rTri.v1)
+                    'Call vec3_mat4_multiply(sTri.v2, R, rTri.v2)
+                    'Call vec3_mat4_multiply(curTri.vn, R, normal)
+
+                    '' do translation
+                    'Call vec3_mat4_multiply(rTri.v0, T, tTri.v0)
+                    'Call vec3_mat4_multiply(rTri.v1, T, tTri.v1)
+                    'Call vec3_mat4_multiply(rTri.v2, T, tTri.v2)
+                End If
+
+                If vec3_equals(normal, VEC3_DEFAULT) Then Call tri_get_normal(tTri, normal)
+                Static camRay As vec3
+                Call vec3_subtract(tTri.v0, player.position, camRay)
+                dp = vec3_dot(normal, camRay)
+
+                ' can I see this object?
+                If (dp < 0) Then
+                    Call vec3_mat4_multiply(tTri.v0, player.viewMat, viewTri.v0)
+                    Call vec3_mat4_multiply(tTri.v1, player.viewMat, viewTri.v1)
+                    Call vec3_mat4_multiply(tTri.v2, player.viewMat, viewTri.v2)
+
+                    viewTri.v0.x = viewTri.v0.x * -1
+                    viewTri.v1.x = viewTri.v1.x * -1
+                    viewTri.v2.x = viewTri.v2.x * -1
+
+                    viewTri.v0.z = viewTri.v0.z * -1
+                    viewTri.v1.z = viewTri.v1.z * -1
+                    viewTri.v2.z = viewTri.v2.z * -1
+
+                    Call draw_tri(viewTri)
+                End If
+            Next
+        Next
+    End Sub
+
+    ' program: display
+
+    Sub draw_tri (t As tri)
+        If brightness > 1 Then brightness = 1
+        If brightness < 0 Then brightness = 0
+
+        texHandle& = -1
+        If t.texPointer > 0 And t.texPointer < TEX_MAX_COUNT Then
+            texHandle& = textureHandler(t.texPointer).texHandle
+        End If
+
+        If Not texHandle& < -1 Then texHandle& = debugImage&
+        w = _Width(texHandle&)
+        h = _Height(texHandle&)
+
+        ' correct texture coords
+        tv0u = t.t0.u * w
+        tv0v = h - t.t0.v * h
+        tv1u = t.t1.u * w
+        tv1v = h - t.t1.v * h
+        tv2u = t.t2.u * w
+        tv2v = h - t.t2.v * h
+        '_AntiClockwise
+        _MapTriangle (tv0u, tv0v)-(tv1u, tv1v)-(tv2u, tv2v), texHandle& To(t.v0.x, t.v0.y, t.v0.z)-(t.v1.x, t.v1.y, t.v1.z)-(t.v2.x, t.v2.y, t.v2.z)
+    End Sub
+
+    ' program: utility
+
+    Function load_stage (fileName$)
+        filePath$ = get_path$(fileName$, "stage")
+        If Not _FileExists(filePath$) Then
+            load_stage = 1
+            Exit Function
+        End If
+
+        For i = 1 To OBJ_MAX_COUNT - 1: Call unload_game_object(i): Next ' unload all objects (and therefore mesh & texture)
+        For i = 1 To TRI_MAX_COUNT - 1: meshHandler(i) = TRI_DEFAULT: Next ' initialize mesh handler j.i.c
+
+        Dim p As vec3
+        Dim vi As vec3
+        Dim s As vec3
+        Dim r As vec3
+
+        meshPosition = 1
+        Open filePath$ For Input As #1
+        If Not EOF(1) Then
+            Input #1, bgColor.x, bgColor.y, bgColor.z
+        End If
+        Do Until EOF(1)
+            Input #1, line$
+            If line$ = "..." Then Exit Do
+            If trim(line$) = "" Then _Continue
+
+            If line$ = "NEW OBJECT" Then
+                Input #1, meshName$, scriptID, castsLight
+                Input #1, p.x, p.y, p.z
+                Input #1, vi.x, vi.y, vi.z
+                Input #1, s.x, s.y, s.z
+                Input #1, r.x, r.y, r.z
+
+                meshPosition = load_game_object(p, vi, s, r, meshName$, scriptID)
+            End If
+        Loop
+        Close #1
+
+        ' default the player
+        player = CONTROLLER_DEFAULT
+        load_stage = 0
+    End Function
+    $Let ENGINEBM = DEFINED
+$End If
+
+$If MATHBM = UNDEFINED Then
+    '$INCLUDE:'math.bm'
+$End If
+
+$If OBJECTBM = UNDEFINED Then
+    '$INCLUDE:'object.bm'
+$End If
+
+$If INTERFACEBM = UNDEFINED Then
+    '$INCLUDE:'interface.bm'
+$End If
+
+
+
+
+
+
+
+

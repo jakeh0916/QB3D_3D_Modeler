@@ -1,0 +1,194 @@
+$If MATHBI = UNDEFINED Then
+    '$INCLUDE:'math.bi'
+$End If
+
+$If OBJECTBI = UNDEFINED Then
+    '$INCLUDE:'object.bi'
+$End If
+
+$If INTERFACEBI = UNDEFINED Then
+    '$Include:'interface.bi'
+$End If
+
+$If INTERFACEBM = UNDEFINED Then
+    Sub io_setup
+        ' start input timer
+        inputTimer = _FreeTimer
+        On Timer(inputTimer, 1 / 60) poll_keyboard
+        Timer(inputTimer) On
+
+        debugImage& = make_hardware_image("debug")
+    End Sub
+
+    Sub clear_kb_flags
+        For i = 1 To 128
+            keyDownRaw(i) = 0
+            keyPressRaw(i) = 0
+        Next
+    End Sub
+
+    Sub poll_keyboard
+        keycode = Inp(96)
+        If keycode > 128 Then
+            keyDownRaw(keycode - 128) = FALSE
+            keyPressRaw(keycode - 128) = 0
+        Else
+            keyDownRaw(keycode) = TRUE
+            If keyPressRaw(keycode) = 0 Then keyPressRaw(keycode) = 1
+        End If
+    End Sub
+
+    Function get_key_down (key$)
+        keycode = get_keycode(key$)
+        If keycode < 0 Then Exit Function
+
+        get_key_down = keyDownRaw(keycode)
+    End Function
+
+    Function get_key_press (key$)
+        keycode = get_keycode(key$)
+        If keycode < 0 Then Exit Function
+
+        If keyPressRaw(keycode) = 1 Then
+            get_key_press = TRUE
+            ' press -> waiting state
+            keyPressRaw(keycode) = 2
+        Else get_key_press = FALSE
+        End If
+    End Function
+
+    Function get_mouse_input (vOut As vec2)
+        vOut = VEC2_DEFAULT
+        buttonDown = 0
+        Do While _MouseInput
+            vOut.u = vOut.u + _MouseMovementX
+            vOut.v = vOut.v + _MouseMovementY
+
+            ' left, right, middle buttons
+            If _MouseButton(1) Then
+                buttonDown = 1
+            ElseIf _MouseButton(2) Then
+                buttonDown = 2
+            ElseIf _MouseButton(3) Then
+                buttonDown = 3
+            End If
+        Loop
+
+        get_mouse_input = buttonDown
+    End Function
+
+    Function get_keycode (key$)
+        keycode = -1
+        Select Case key$
+            Case "esc": keycode = 1
+
+            Case "f01": keycode = 59
+            Case "f02": keycode = 60
+            Case "f03": keycode = 61
+            Case "f04": keycode = 62
+            Case "f05": keycode = 63
+            Case "f06": keycode = 64
+            Case "f07": keycode = 65
+            Case "f08": keycode = 66
+            Case "f09": keycode = 67
+            Case "f10": keycode = 68
+            Case "f11": keycode = 87
+            Case "f12": keycode = 88
+
+            Case "q": keycode = 16
+            Case "w": keycode = 17
+            Case "e": keycode = 18
+            Case "r": keycode = 19
+            Case "t": keycode = 20
+            Case "y": keycode = 21
+            Case "u": keycode = 22
+            Case "i": keycode = 23
+            Case "o": keycode = 24
+            Case "p": keycode = 25
+
+            Case "a": keycode = 30
+            Case "s": keycode = 31
+            Case "d": keycode = 32
+            Case "f": keycode = 33
+            Case "g": keycode = 34
+            Case "h": keycode = 35
+            Case "j": keycode = 36
+            Case "k": keycode = 37
+            Case "l": keycode = 38
+
+            Case "z": keycode = 44
+            Case "x": keycode = 45
+            Case "c": keycode = 46
+            Case "v": keycode = 47
+            Case "b": keycode = 48
+            Case "n": keycode = 49
+            Case "m": keycode = 50
+
+            Case "lshift": keycode = 42
+            Case "lctrl": keycode = 29
+            Case "space": keycode = 57
+
+            Case "up": keycode = 72
+            Case "left": keycode = 75
+            Case "down": keycode = 80
+            Case "right": keycode = 77
+        End Select
+        get_keycode = keycode
+    End Function
+
+    ' file handling
+
+    Function get_path$ (fileName$, resourceType$)
+        newPath$ = ""
+        Select Case resourceType$
+            Case "stage": newPath$ = "resources/stages/" + fileName$ + ".stg"
+            Case "object": newPath$ = "resources/objects/" + fileName$ + ".obj"
+            Case "material": newPath$ = "resources/objects/" + fileName$ + ".mtl"
+            Case "image"
+                newPath$ = "resources/images/" + fileName$ + ".png"
+                If Not _FileExists(newPath$) Then newPath$ = "resources/images/" + fileName$ + ".jpg"
+        End Select
+
+        get_path$ = newPath$
+    End Function
+
+    Function make_hardware_image (fileName$)
+        image32 = _LoadImage(get_path$(fileName$, "image"), 32)
+        image33 = _CopyImage(image33, 33)
+        _FreeImage image32
+        make_hardware_image = image33
+    End Function
+
+    ' string handling
+
+    Function get_sub_string$ (in$, sep$, num As Integer)
+        ' a record of where seperator occurs
+        Dim seperatorLocs(0 To 15) As Integer
+        sLength = Len(in$)
+
+        ' count through input
+        characterCounter = 1
+        seperatorCounter = 1
+        Do
+            If Mid$(in$, characterCounter, 1) = sep$ Then
+                seperatorLocs(seperatorCounter) = characterCounter
+                seperatorCounter = seperatorCounter + 1
+            End If
+            characterCounter = characterCounter + 1
+        Loop While characterCounter <= sLength And seperatorCounter < 15
+        seperatorLocs(seperatorCounter) = sLength
+
+        ' extract sub string from input
+        If num = seperatorCounter - 1 Then
+            subString$ = Mid$(in$, seperatorLocs(num) + 1, seperatorLocs(num + 1) - seperatorLocs(num))
+        Else subString$ = Mid$(in$, seperatorLocs(num) + 1, seperatorLocs(num + 1) - seperatorLocs(num) - 1)
+        End If
+
+        get_sub_string$ = subString$
+    End Function
+
+    Function trim$ (in$)
+        trim$ = LTrim$(RTrim$(in$))
+    End Function
+    $Let INTERFACEBM = DEFINED
+$End If

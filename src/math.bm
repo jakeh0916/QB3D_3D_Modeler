@@ -1,0 +1,214 @@
+$If MATHBI = UNDEFINED Then
+    '$include:'math.bi'
+$End If
+
+$If MATHBM = UNDEFINED Then
+    Function floor (n, f)
+        If f > n Then
+            floor = f
+        Else floor = n
+        End If
+    End Function
+
+    Function ceil (n, c)
+        If c < n Then
+            ceil = c
+        Else ceil = n
+        End If
+    End Function
+
+    ' vec3
+
+    Function vec3_equals (a As vec3, b As vec3)
+        vec3_equals = (a.x = b.x And a.y = b.y And a.z = b.z)
+    End Function
+
+    Sub vec3_add (a As vec3, b As vec3, vOut As vec3)
+        vOut.x = a.x + b.x
+        vOut.y = a.y + b.y
+        vOut.z = a.z + b.z
+    End Sub
+
+    Sub vec3_add_3 (a As vec3, b As vec3, c As vec3, vOut As vec3)
+        vOut.x = a.x + b.x + c.x
+        vOut.y = a.y + b.y + c.y
+        vOut.z = a.z + b.z + c.z
+    End Sub
+
+    Sub vec3_subtract (a As vec3, b As vec3, vOut As vec3)
+        vOut.x = a.x - b.x
+        vOut.y = a.y - b.y
+        vOut.z = a.z - b.z
+    End Sub
+
+    Sub vec3_multiply (v As vec3, k, vOut As vec3)
+        vOut.x = v.x * k
+        vOut.y = v.y * k
+        vOut.z = v.z * k
+    End Sub
+
+    Sub vec3_divide (v As vec3, k, vOut As vec3)
+        vOut.x = v.x / k
+        vOut.y = v.y / k
+        vOut.z = v.z / k
+    End Sub
+
+    Sub vec3_cross (a As vec3, b As vec3, vOut As vec3)
+        vOut.x = a.y * b.z - a.z * b.y
+        vOut.y = a.z * b.x - a.x * b.z
+        vOut.z = a.x * b.y - a.y * b.x
+    End Sub
+
+    Function vec3_dot (a As vec3, b As vec3)
+        vec3_dot = a.x * b.x + a.y * b.y + a.z * b.z
+    End Function
+
+    Sub vec3_mat4_multiply (v As vec3, m As mat4, vOut As vec3)
+        vOut.x = v.x * m.m00 + v.y * m.m10 + v.z * m.m20 + m.m30
+        vOut.y = v.x * m.m01 + v.y * m.m11 + v.z * m.m21 + m.m31
+        vOut.z = v.x * m.m02 + v.y * m.m12 + v.z * m.m22 + m.m32
+        w = v.x * m.m03 + v.y * m.m13 + v.z * m.m23 + m.m33
+
+        If w <> 0 Then
+            vOut.x = vOut.x / w
+            vOut.y = vOut.y / w
+            vOut.z = vOut.z / w
+        End If
+    End Sub
+
+    Sub vec3_normalize (v As vec3)
+        l = vec3_get_length(v)
+        If l > 0 Then
+            v.x = v.x / l
+            v.y = v.y / l
+            v.z = v.z / l
+        End If
+    End Sub
+
+    Function vec3_get_distance (a As vec3, b As vec3)
+        vec3_get_distance = Sqr((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y) + (b.z - a.z) * (b.z - a.z))
+    End Function
+
+    Function vec3_get_length (v As vec3)
+        vec3_get_length = Sqr(v.x * v.x + v.y * v.y + v.z * v.z)
+    End Function
+
+    ' tri
+
+    Function tri_equals (a As tri, b As tri)
+        If a.v0.x = b.v0.x And a.v1.x = b.v1.x And a.v2.x = b.v2.x Then
+            If a.v0.y = b.v0.y And a.v1.y = b.v1.y And a.v2.y = b.v2.y Then
+                If a.v0.z = b.v0.z And a.v1.z = b.v1.z And a.v2.z = b.v2.z Then
+                    tri_equals = TRUE
+                    Exit Function
+                End If
+            End If
+        End If
+        tri_equals = FALSE
+    End Function
+
+    Sub tri_get_midpoint (t As tri, vOut As vec3)
+        Call vec3_add_3(t.v0, t.v1, t.v2, vOut)
+        Call vec3_multiply(vOut, 1 / 3, vOut)
+    End Sub
+
+    Sub tri_get_normal (t As tri, vOut As vec3)
+        Dim a As vec3: Dim b As vec3
+        Call vec3_subtract(t.v1, t.v0, a)
+        Call vec3_subtract(t.v2, t.v0, b)
+        Call vec3_cross(a, b, vOut)
+        Call vec3_normalize(vOut)
+    End Sub
+
+    ' mat4
+
+    Sub mat4_multiply (a As mat4, b As mat4, mOut As mat4)
+        mOut.m00 = a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30
+        mOut.m10 = a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20 + a.m13 * b.m30
+        mOut.m20 = a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20 + a.m23 * b.m30
+        mOut.m30 = a.m30 * b.m00 + a.m31 * b.m10 + a.m32 * b.m20 + a.m33 * b.m30
+
+        mOut.m01 = a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31
+        mOut.m11 = a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21 + a.m13 * b.m31
+        mOut.m21 = a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21 + a.m23 * b.m31
+        mOut.m31 = a.m30 * b.m01 + a.m31 * b.m11 + a.m32 * b.m21 + a.m33 * b.m31
+
+        mOut.m02 = a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22 + a.m03 * b.m32
+        mOut.m12 = a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22 + a.m13 * b.m32
+        mOut.m22 = a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22 + a.m23 * b.m32
+        mOut.m32 = a.m30 * b.m02 + a.m31 * b.m12 + a.m32 * b.m22 + a.m33 * b.m32
+
+        mOut.m03 = a.m00 * b.m03 + a.m01 * b.m13 + a.m02 * b.m23 + a.m03 * b.m33
+        mOut.m13 = a.m10 * b.m03 + a.m11 * b.m13 + a.m12 * b.m23 + a.m13 * b.m33
+        mOut.m23 = a.m20 * b.m03 + a.m21 * b.m13 + a.m22 * b.m23 + a.m23 * b.m33
+        mOut.m33 = a.m30 * b.m03 + a.m31 * b.m13 + a.m32 * b.m23 + a.m33 * b.m33
+    End Sub
+
+    Sub mat4_make_inverse (m As mat4, mOut As mat4)
+        mOut.m00 = m.m00: mOut.m01 = m.m10: mOut.m02 = m.m20: mOut.m03 = 0.0
+        mOut.m10 = m.m01: mOut.m11 = m.m11: mOut.m12 = m.m21: mOut.m13 = 0.0
+        mOut.m20 = m.m02: mOut.m21 = m.m12: mOut.m22 = m.m22: mOut.m23 = 0.0
+        mOut.m30 = -(m.m30 * mOut.m00 + m.m31 * mOut.m10 + m.m32 * mOut.m20)
+        mOut.m31 = -(m.m30 * mOut.m01 + m.m31 * mOut.m11 + m.m32 * mOut.m21)
+        mOut.m32 = -(m.m30 * mOut.m02 + m.m31 * mOut.m12 + m.m32 * mOut.m22)
+        mOut.m33 = 1.0
+    End Sub
+
+    Sub mat4_make_point_at (position As vec3, look As vec3, up As vec3, mOut As mat4)
+        Call vec3_normalize(look)
+        Call vec3_normalize(up)
+        Dim right As vec3
+        Call vec3_cross(up, look, right)
+
+        mOut.m00 = right.x: mOut.m01 = right.y: mOut.m02 = right.z: mOut.m03 = 0.0
+        mOut.m10 = up.x: mOut.m11 = up.y: mOut.m12 = up.z: mOut.m13 = 0.0
+        mOut.m20 = look.x: mOut.m21 = look.y: mOut.m22 = look.z: mOut.m23 = 0.0
+        mOut.m30 = position.x: mOut.m31 = position.y: mOut.m32 = position.z: mOut.m33 = 1.0
+    End Sub
+
+    Sub mat4_make_scale (mOut As mat4, sx, sy, sz)
+        mOut = MAT4_IDENTITY
+        mOut.m00 = sx
+        mOut.m11 = sy
+        mOut.m22 = sz
+        mOut.m33 = 1.0
+    End Sub
+
+    Sub mat4_make_rotation (mOut As mat4, theta, axis$)
+        mOut = MAT4_DEFAULT
+        Select Case axis$
+            Case "x"
+                mOut.m00 = 1.0
+                mOut.m11 = Cos(theta)
+                mOut.m12 = Sin(theta)
+                mOut.m21 = -Sin(theta)
+                mOut.m22 = Cos(theta)
+                mOut.m33 = 1.0
+
+            Case "y"
+                mOut.m00 = Cos(theta)
+                mOut.m02 = Sin(theta)
+                mOut.m11 = 1.0
+                mOut.m20 = -Sin(theta)
+                mOut.m22 = Cos(theta)
+                mOut.m33 = 1.0
+
+            Case "z"
+                mOut.m00 = Cos(theta)
+                mOut.m01 = Sin(theta)
+                mOut.m10 = -Sin(theta)
+                mOut.m11 = Cos(theta)
+                mOut.m22 = 1.0
+                mOut.m33 = 1.0
+        End Select
+    End Sub
+
+    Sub mat4_make_translation (mOut As mat4, dx, dy, dz)
+        mOut = MAT4_IDENTITY
+        mOut.m30 = dx
+        mOut.m31 = dy
+        mOut.m32 = dz
+    End Sub
+
+    $Let MATHBM = DEFINED
+$End If

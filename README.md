@@ -2,7 +2,7 @@
  
 ## **About QB3D**
  
-*QB3D* is a work-in-progress 3D modeling software created by Jake Huseman.
+*QB3D* is a work-in-progress (this is not true, I'm not working on it anymore) 3D modeling software created by Jake Huseman.
  
 This app is written with *QB64* (BASIC's weird cousin, updated to play nicely with 64-bit processors).
  
